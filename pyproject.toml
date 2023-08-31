@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "abchainmerger"
+version = "0.1.0"
+description = ""
+authors = ["Tadeusz Satlawa <tadeusz.satlawa@naturalantibody.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+streamlit = "^1.26.0"
+biopython = "^1.81"
+
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^6.1.0"
+pre-commit = "^3.3.3"
+pytest = "^7.4.0"
+mypy = "^1.5.1"
+commitizen = "^3.7.0"
+coverage = "^7.3.0"
+python-semantic-release = "^8.0.8"
+yapf = "^0.40.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
