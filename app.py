@@ -11,7 +11,7 @@ from Bio.SeqRecord import SeqRecord
 
 st.title('AbChain Merger')
 
-uploaded_file = st.file_uploader("Input file", type=["fa", "fasta", "fq", "fastq"], label_visibility="collapsed")
+uploaded_file = st.file_uploader("Input file", type=["fa", "fasta"], label_visibility="collapsed")
 if uploaded_file is None:
     st.markdown('Or paste sequences directly:')
     input_seq = st.text_area("Input sequences (in FASTA format)", height=500, value='')
