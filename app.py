@@ -45,8 +45,9 @@ with col2:
 
 with col3:
     nonpaired = st.radio(
-        "Not paired action 👉",
+        "Not paired action",
         options=["remove", "keep"],
+        index=1
     )
 
 if not light_regex or not heavy_regex:
