@@ -43,11 +43,12 @@ col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
 with col1:
     ending = st.radio('Ending', ['prefix', 'suffix'], horizontal=True, index=1)
 with col2:
-    light_cases = st_tags(label=f'Enter options for light chain:', value=['_LC'], text='Enter to add more')
+    light_cases = st_tags(label=f'Enter options for light chain:', value=['_LC', '_VK', '_VL'],
+                          text='Enter to add more')
     if not light_cases:
         st.error('Please provide values')
 with col3:
-    heavy_cases = st_tags(label=f'Enter options for heavy chain:', value=['_HC'], text='Enter to add more')
+    heavy_cases = st_tags(label=f'Enter options for heavy chain:', value=['_HC', '_VH'], text='Enter to add more')
     if not heavy_cases:
         st.error('Please provide values')
 with col4:
