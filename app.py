@@ -1,14 +1,19 @@
+import io
 import re
 from collections import defaultdict
 from enum import Enum, auto
 from io import StringIO
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 
+import Bio.SeqIO
+import streamlit
 import streamlit as st
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
+from streamlit_tags import st_tags
 
+st.set_page_config(layout='wide')
 st.title('AbChain Merger')
 
 uploaded_file = st.file_uploader("Input file", type=["fa", "fasta"], label_visibility="collapsed")
@@ -34,23 +39,29 @@ def validate_regex(regex, exp_groups=1):
     return regex
 
 
-col1, col2, col3 = st.columns([1, 1, 1])
+col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
 with col1:
-    heavy_regex_str = col1.text_input("Heavy regex", "(.*)_HC")
-    heavy_regex = validate_regex(heavy_regex_str, 1)
-
+    ending = st.radio('Ending', ['prefix', 'suffix'], horizontal=True, index=1)
 with col2:
-    light_regex_str = col2.text_input("Light regex", "(.*)_LC")
-    light_regex = validate_regex(light_regex_str, 1)
-
+    light_cases = st_tags(label=f'Enter options for light chain:', value=['_LC', '_VK', '_VL'],
+                          text='Enter to add more')
+    if not light_cases:
+        st.error('Please provide values')
 with col3:
+    heavy_cases = st_tags(label=f'Enter options for heavy chain:', value=['_HC', '_VH'], text='Enter to add more')
+    if not heavy_cases:
+        st.error('Please provide values')
+with col4:
     nonpaired = st.radio(
         "Not paired action",
         options=["remove", "keep"],
-        index=1
+        index=1,
+        horizontal=True
     )
-
-if not light_regex or not heavy_regex:
+if set(light_cases) & set(heavy_cases):
+    st.error('Cannot have the same options for light and heavy!')
+    st.stop()
+if not light_cases or not heavy_cases:
     st.stop()
 
 if uploaded_file:
@@ -65,27 +76,49 @@ class SeqType(Enum):
     NONE = auto()
 
 
+def get_base(seq: str, suffix_prefix: str, values: list[str]) -> Optional[str]:
+    if suffix_prefix == 'prefix':
+        for val in values:
+            if seq.startswith(val):
+                return seq[len(val):]
+    if suffix_prefix == 'suffix':
+        for val in values:
+            if seq.endswith(val):
+                return seq[:-len(val)]
+    return None
+
+
 def read_fasta_seq(file) -> dict[str, dict[SeqType, SeqRecord]]:
     stems: dict[str, dict[SeqType, SeqRecord]] = defaultdict(dict)
     for record in SeqIO.parse(file, "fasta"):
-        heavy_match = heavy_regex.match(record.id)
-        light_match = light_regex.match(record.id)
-        if light_match and heavy_match:
-            raise ValueError(f'Sequence {record.id} matches both conditions')
-        if heavy_match:
-            if SeqType.HEAVY in stems[heavy_match.group(1)]:
+        heavy_base = get_base(record.id, ending, heavy_cases)
+        if heavy_base:
+            if SeqType.HEAVY in stems[heavy_base]:
                 raise ValueError(f'Heavy sequence already matched for {record.id}')
-            stems[heavy_match.group(1)][SeqType.HEAVY] = record
-        elif light_match:
-            if SeqType.LIGHT in stems[light_match.group(1)]:
+            stems[heavy_base][SeqType.HEAVY] = record
+            continue
+        light_base = get_base(record.id, ending, light_cases)
+        if light_base:
+            if SeqType.LIGHT in stems[light_base]:
                 raise ValueError(f'Light sequence already matched for {record.id}')
-            stems[light_match.group(1)][SeqType.LIGHT] = record
-        else:
-            if SeqType.NONE in stems[record.id]:
-                raise ValueError(f'Nonmatched sequence already exists for {record.id}')
-            stems[record.id][SeqType.NONE] = record
+            stems[light_base][SeqType.LIGHT] = record
+            continue
+        # neither matched
+        if SeqType.NONE in stems[record.id]:
+            # if this happens input fasta is wrong and has duplicated ids
+            raise ValueError(f'Nonmatched sequence already exists for {record.id}')
+        stems[record.id][SeqType.NONE] = record
 
     return stems
+
+
+def find_new_name(sequences: dict[str, dict[SeqType, SeqRecord]], current_name: str):
+    new_name = current_name + '_merged'
+    current_id = 0
+    while new_name in sequences:
+        current_id += 1
+        new_name = current_name + '_merged' + str(current_id)
+    return new_name
 
 
 def merge_sequences(sequences: dict[str, dict[SeqType, SeqRecord]],
@@ -95,13 +128,14 @@ def merge_sequences(sequences: dict[str, dict[SeqType, SeqRecord]],
         if SeqType.HEAVY in grp_seq and SeqType.LIGHT in grp_seq and SeqType.NONE not in grp_seq:
             yield SeqRecord(seq=grp_seq[SeqType.LIGHT].seq + grp_seq[SeqType.HEAVY].seq, id=grp_id, description='')
             continue
-        # case 1 - L+H + non matching
+        # case 2 - L+H + non matching
         # cannot save grouped with same name because nonmacthing will be
         if len(grp_seq) == len(SeqType):
             if return_nonpaired:
                 yield grp_seq[SeqType.NONE]
-            new_name = grp_id + "MERGED"
-            yield SeqRecord(seq=grp_seq[SeqType.LIGHT].seq + grp_seq[SeqType.HEAVY].seq, id=new_name, description='')
+            new_name = find_new_name(sequences, grp_id)
+            yield SeqRecord(seq=grp_seq[SeqType.LIGHT].seq.strip() + grp_seq[SeqType.HEAVY].seq.strip(), id=new_name,
+                            description='')
             continue
         if return_nonpaired:
             for typ in SeqType:
@@ -111,10 +145,15 @@ def merge_sequences(sequences: dict[str, dict[SeqType, SeqRecord]],
 
 raw_records = read_fasta_seq(source)
 merged_records = list(merge_sequences(raw_records, return_nonpaired=nonpaired == 'keep'))
-rendered_fasta = ''.join(x.format('fasta') for x in merged_records)
+rendered_fasta = io.StringIO()
+Bio.SeqIO.write(merged_records, rendered_fasta, 'fasta')
 
-if merged_records and len(merged_records) < 100:
-    st.text_area(label='Output fasta', value=rendered_fasta, disabled=True, height=500)
+if merged_records:
+    if len(merged_records) < 100:
+        st.text_area(label='Output fasta', value=rendered_fasta.getvalue(), disabled=True, height=500)
+    else:
+        st.write('Too large output to display, please download file.')
+
 if merged_records:
     if uploaded_file:
         download_path = Path(uploaded_file.name)
@@ -123,6 +162,6 @@ if merged_records:
         download_filename = 'merged.fasta'
 
     st.download_button(label="Download output as fasta",
-                       data=rendered_fasta,
+                       data=rendered_fasta.getvalue(),
                        file_name=download_filename,
                        mime='application/fasta')
