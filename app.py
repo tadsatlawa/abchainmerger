@@ -112,6 +112,15 @@ def read_fasta_seq(file) -> dict[str, dict[SeqType, SeqRecord]]:
     return stems
 
 
+def find_new_name(sequences: dict[str, dict[SeqType, SeqRecord]], current_name: str):
+    new_name = current_name + '_merged'
+    current_id = 0
+    while new_name in sequences:
+        current_id += 1
+        new_name = current_name + '_merged' + str(current_id)
+    return new_name
+
+
 def merge_sequences(sequences: dict[str, dict[SeqType, SeqRecord]],
                     return_nonpaired) -> Generator[SeqRecord, None, None]:
     for grp_id, grp_seq in sequences.items():
@@ -119,12 +128,12 @@ def merge_sequences(sequences: dict[str, dict[SeqType, SeqRecord]],
         if SeqType.HEAVY in grp_seq and SeqType.LIGHT in grp_seq and SeqType.NONE not in grp_seq:
             yield SeqRecord(seq=grp_seq[SeqType.LIGHT].seq + grp_seq[SeqType.HEAVY].seq, id=grp_id, description='')
             continue
-        # case 1 - L+H + non matching
+        # case 2 - L+H + non matching
         # cannot save grouped with same name because nonmacthing will be
         if len(grp_seq) == len(SeqType):
             if return_nonpaired:
                 yield grp_seq[SeqType.NONE]
-            new_name = grp_id + "MERGED"
+            new_name = find_new_name(sequences, grp_id)
             yield SeqRecord(seq=grp_seq[SeqType.LIGHT].seq.strip() + grp_seq[SeqType.HEAVY].seq.strip(), id=new_name,
                             description='')
             continue
