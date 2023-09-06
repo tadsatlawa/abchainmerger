@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.9.8"
 biopython = "^1.81"
 streamlit = "^1.26.0"
+streamlit-tags = "^1.2.8"
 
 [tool.poetry.group.dev.dependencies]
 flake8 = "^6.1.0"
