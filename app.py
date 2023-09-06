@@ -1,3 +1,4 @@
+import io
 import re
 from collections import defaultdict
 from enum import Enum, auto
@@ -5,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Generator, Optional
 
+import Bio.SeqIO
 import streamlit
 import streamlit as st
 from Bio import SeqIO
@@ -122,7 +124,8 @@ def merge_sequences(sequences: dict[str, dict[SeqType, SeqRecord]],
             if return_nonpaired:
                 yield grp_seq[SeqType.NONE]
             new_name = grp_id + "MERGED"
-            yield SeqRecord(seq=grp_seq[SeqType.LIGHT].seq + grp_seq[SeqType.HEAVY].seq, id=new_name, description='')
+            yield SeqRecord(seq=grp_seq[SeqType.LIGHT].seq.strip() + grp_seq[SeqType.HEAVY].seq.strip(), id=new_name,
+                            description='')
             continue
         if return_nonpaired:
             for typ in SeqType:
@@ -132,11 +135,12 @@ def merge_sequences(sequences: dict[str, dict[SeqType, SeqRecord]],
 
 raw_records = read_fasta_seq(source)
 merged_records = list(merge_sequences(raw_records, return_nonpaired=nonpaired == 'keep'))
-rendered_fasta = ''.join(x.format('fasta') for x in merged_records)
+rendered_fasta = io.StringIO()
+Bio.SeqIO.write(merged_records, rendered_fasta, 'fasta')
 
 if merged_records:
     if len(merged_records) < 100:
-        st.text_area(label='Output fasta', value=rendered_fasta, disabled=True, height=500)
+        st.text_area(label='Output fasta', value=rendered_fasta.getvalue(), disabled=True, height=500)
     else:
         st.write('Too large output to display, please download file.')
 
@@ -148,6 +152,6 @@ if merged_records:
         download_filename = 'merged.fasta'
 
     st.download_button(label="Download output as fasta",
-                       data=rendered_fasta,
+                       data=rendered_fasta.getvalue(),
                        file_name=download_filename,
                        mime='application/fasta')
